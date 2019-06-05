@@ -9,15 +9,17 @@
 #include <stdlib.h>
 
 #define CLEAR "clear"
-#define BUFFER_SIZE 1
-#define BOARD_SIZE 20
-#define BLOCK_SIZE 3
-#define X_START_POINT 9
-#define EMPTY_CHAR ' '
-#define BLOCK_CHAR '-'
-#define FRAME_CHAR '*'
-#define BOARD_LIM 3
+#define BUFFER_S 1
+#define BOARD_S 20
+#define BLOCK_S 3
+#define INIT_POS 8
+#define EMPTY_FIELD ' '
+#define BLOCK_FIELD '-'
+#define FRAME_FIELD '*'
+#define BOARD_LIMIT 3
 #define ALARM_WAIT 1
+
+typedef enum {HORIZONTAL, VERTICAL} state;
 
 typedef struct {
     int x;
@@ -30,10 +32,11 @@ typedef struct {
     int leftMost;
     int downMost;
     int numOfPoints;
+    state state;
 } Block;
 
 typedef struct {
-    char spots[BOARD_SIZE][BOARD_SIZE+1];
+    char spots[BOARD_S][BOARD_S+1];
     int shouldStop;
 } Board;
 
@@ -51,7 +54,7 @@ void RefreshBlockPosition(){
     for(i = 0; i < block->numOfPoints; i++){
         x = block->points[i].x;
         y = block->points[i].y;
-        board->spots[y][x] = BLOCK_CHAR;
+        board->spots[y][x] = BLOCK_FIELD;
     }
 }
 
@@ -61,8 +64,8 @@ void RefreshBlockPosition(){
  * @param block block
  * @return 1 for true, 0 for false
  */
-int ShouldRemoveBlock(){
-    if (block->downMost > BOARD_SIZE - BOARD_LIM){
+int IsOnFloor(){
+    if (block->downMost > BOARD_S - BOARD_LIMIT){
         return 1;
     }
     return 0;
@@ -72,11 +75,11 @@ int ShouldRemoveBlock(){
 /**
  * push down the block
  */
-void DownBlock(){
-    if(block->downMost <= BOARD_SIZE - BOARD_LIM) {
+void PushDown(){
+    if(block->downMost <= BOARD_S - BOARD_LIMIT) {
         int i;
         for (i = block->numOfPoints - 1; i >= 0; --i) {
-            board->spots[block->points[i].y][block->points[i].x] = EMPTY_CHAR;
+            board->spots[block->points[i].y][block->points[i].x] = EMPTY_FIELD;
             block->points[i].y++;
         }
         block->downMost++;
@@ -87,11 +90,11 @@ void DownBlock(){
 /**
  * push right the block
  */
-void RightBlock(){
-    if(block->rightMost <= BOARD_SIZE - BOARD_LIM - 1) {
+void PushRight(){
+    if(block->rightMost <= BOARD_S - BOARD_LIMIT - 1) {
         int i;
         for (i = block->numOfPoints - 1; i >= 0; --i) {
-            board->spots[block->points[i].y][block->points[i].x] = EMPTY_CHAR;
+            board->spots[block->points[i].y][block->points[i].x] = EMPTY_FIELD;
             block->points[i].x++;
         }
         block->rightMost++;
@@ -103,11 +106,11 @@ void RightBlock(){
 /**
  * push left the block
  */
-void LeftBlock(){
-    if(BOARD_LIM <= block->leftMost) {
+void PushLeft(){
+    if(BOARD_LIMIT <= block->leftMost) {
         int i;
         for (i = block->numOfPoints - 1; i >= 0; --i) {
-            board->spots[block->points[i].y][block->points[i].x] = EMPTY_CHAR;
+            board->spots[block->points[i].y][block->points[i].x] = EMPTY_FIELD;
             block->points[i].x--;
         }
         block->leftMost--;
@@ -119,17 +122,17 @@ void LeftBlock(){
 /**
  * Display tetris.
  */
-void DrawBoard(){
+void DrawTetris(){
     system(CLEAR);
     int i,j;
-    for (i = 0; i < BOARD_SIZE; i++){
+    for (i = 0; i < BOARD_S; i++){
         printf("%s", board->spots[i]);
         printf("\n");
     }
 }
 
 
-void CopyBlock(Block *dest, Block *src){
+void DeepCopy(Block *dest, Block *src){
     dest->numOfPoints = src->numOfPoints;
     dest->leftMost = src->leftMost;
     dest->rightMost = src->rightMost;
@@ -138,71 +141,59 @@ void CopyBlock(Block *dest, Block *src){
         dest->points[i].x = src->points[i].x;
         dest->points[i].y = src->points[i].y;
     }
-
 }
 
 
 /**
  * Delete block from board.
  */
-void ClearBlock(){
+void ClearBoard(){
     int i;
     for (i = block->numOfPoints-1; i >= 0; --i){
-        board->spots[block->points[i].y][block->points[i].x] = EMPTY_CHAR;
+        board->spots[block->points[i].y][block->points[i].x] = EMPTY_FIELD;
     }
 }
 
 
+/**
+ * Flip block.
+ */
 void FlipBlock(){
     Block copy;
     copy.points = malloc(sizeof(Point) * block->numOfPoints);
-    CopyBlock(&copy, block);
+    DeepCopy(&copy, block);
     Point center = copy.points[copy.numOfPoints / 2];
-    int centerX = center.x;
-    int centerY = center.y;
-    int diff;
-    int rightMost = centerX;
-    int leftMost = centerX;
-    int downMost = centerY;
-    for(int i = 0; i < copy.numOfPoints; i++){
+    int centerX, centerY, rightMost, leftMost, downMost;
+    rightMost = leftMost = centerX = center.x;
+    downMost = centerY = center.y;
+
+    for(int i = copy.numOfPoints-1; i >=0; --i){
         Point p = copy.points[i];
-        if (p.x != centerX && p.y == centerY){
-            diff = centerX - p.x;
+        if (block->state == VERTICAL && p.x != centerX) {
             copy.points[i].x = centerX;
-            copy.points[i].y = centerY + diff;
+            copy.points[i].y = centerY + centerX - p.x;
 
-            if (copy.points[i].x > rightMost){
-                rightMost = copy.points[i].x;
-            }
-            if (copy.points[i].x < leftMost){
-                leftMost = copy.points[i].x;
-            }
-            if (copy.points[i].y > downMost){
-                downMost = copy.points[i].y;
-            }
-
-        } else if (p.y != centerY && p.x == centerX){
-            diff = centerY - p.y;
-            copy.points[i].x = centerX + diff;
+        }  else if(block->state == HORIZONTAL &&  p.y != centerY)  {
+            copy.points[i].x = centerX + centerY - p.y;
             copy.points[i].y = centerY;
-
-            if (copy.points[i].x > rightMost){
-                rightMost = copy.points[i].x;
-            }
-            if (copy.points[i].x < leftMost){
-                leftMost = copy.points[i].x;
-            }
-            if (copy.points[i].y > downMost){
-                downMost = copy.points[i].y;
-            }
+        }
+        if (copy.points[i].y > downMost){
+            downMost = copy.points[i].y;
+        }
+        if (copy.points[i].x < leftMost){
+            leftMost = copy.points[i].x;
+        }
+        if (copy.points[i].x > rightMost){
+            rightMost = copy.points[i].x;
         }
     }
-    if (rightMost <= BOARD_SIZE - BOARD_LIM && leftMost >= BOARD_LIM && downMost < BOARD_SIZE - BOARD_LIM){
-        ClearBlock();
-        CopyBlock(block, &copy);
-        block->rightMost = rightMost;
-        block->leftMost = leftMost;
+    if ((leftMost >= BOARD_LIMIT - 1) && (rightMost <= BOARD_S - BOARD_LIMIT) && (downMost < BOARD_S - BOARD_LIMIT)){
+        block->state = (block->state + 1) % 2;
+        ClearBoard();
+        DeepCopy(block, &copy);
         block->downMost = downMost;
+        block->leftMost = leftMost;
+        block->rightMost = rightMost;
     }
     free(copy.points);
 }
@@ -213,8 +204,8 @@ void FlipBlock(){
  * @param sig signal
  */
 void SignalHandler(int sig){
-    if(!ShouldRemoveBlock() && sig == SIGUSR2){
-        char buffer[BUFFER_SIZE];
+    if(!IsOnFloor() && sig == SIGUSR2){
+        char buffer[BUFFER_S];
         //  load char from ex51.c
         read(0, buffer, sizeof(buffer));
         char pushed = buffer[0];
@@ -223,13 +214,13 @@ void SignalHandler(int sig){
                 board->shouldStop = 1;
                 break;
             case 'a':
-                LeftBlock();
+                PushLeft();
                 break;
             case 'd':
-                RightBlock();
+                PushRight();
                 break;
             case 's':
-                DownBlock();
+                PushDown();
                 break;
             case 'w':
                 FlipBlock();
@@ -238,7 +229,7 @@ void SignalHandler(int sig){
                 break;
         }
         RefreshBlockPosition();
-        DrawBoard();
+        DrawTetris();
     }
 }
 
@@ -247,10 +238,10 @@ void SignalHandler(int sig){
  * Time passed.
  */
 void AlarmHandle(int sig){
-    if(!ShouldRemoveBlock() && sig == SIGALRM){
-        DownBlock();
+    if(!IsOnFloor() && sig == SIGALRM){
+        PushDown();
         RefreshBlockPosition();
-        DrawBoard();
+        DrawTetris();
     }
     alarm(ALARM_WAIT);
 }
@@ -260,23 +251,23 @@ void AlarmHandle(int sig){
  * Create board.
  * @return board
  */
-Board* CreateEmptyBoard(){
+Board* CreateTetrisBoard(){
     Board* board = malloc(sizeof(Board));
     board->shouldStop = 0;
     int i, j;
-    for(i = BOARD_SIZE - 2; i >= 0; --i){
-        for(j = 1; j < BOARD_SIZE - 1; j++){
-            board->spots[i][j] = EMPTY_CHAR;
+    for(i = BOARD_S - 2; i >= 0; --i){
+        for(j = 1; j < BOARD_S - 1; j++){
+            board->spots[i][j] = EMPTY_FIELD;
         }
     }
     // put * on margin
-    for(i = BOARD_SIZE-1; i >= 0; --i){
-        board->spots[BOARD_SIZE - 1][i] = FRAME_CHAR;
+    for(i = BOARD_S-1; i >= 0; --i){
+        board->spots[BOARD_S - 1][i] = FRAME_FIELD;
     }
-    for(i = BOARD_SIZE - 2; i >=0 ; --i) {
-        board->spots[i][0] = FRAME_CHAR;
-        board->spots[i][BOARD_SIZE - 1] = FRAME_CHAR;
-        board->spots[i][BOARD_SIZE] = '\0';
+    for(i = BOARD_S - 2; i >=0 ; --i) {
+        board->spots[i][0] = FRAME_FIELD;
+        board->spots[i][BOARD_S - 1] = FRAME_FIELD;
+        board->spots[i][BOARD_S] = '\0';
     }
     return board;
 }
@@ -291,11 +282,12 @@ Block* InitBlock(Block *block){
     int i;
     for (i = 0; i < block->numOfPoints; i++){
         block->points[i].y = 0;
-        block->points[i].x = X_START_POINT + i;
+        block->points[i].x = INIT_POS + i;
     }
     block->downMost = 0;
-    block->rightMost = X_START_POINT + block->numOfPoints - 1;
-    block->leftMost = X_START_POINT;
+    block->rightMost = INIT_POS + block->numOfPoints - 1;
+    block->leftMost = INIT_POS;
+    block->state = VERTICAL;
     return block;
 }
 
@@ -305,7 +297,7 @@ Block* InitBlock(Block *block){
  * @param numOfPoints 3
  * @return block
  */
-Block* CreateFirstBlock(int numOfPoints){
+Block* CreateBlock(int numOfPoints){
     Block *block = malloc(sizeof(block));
     block->numOfPoints = numOfPoints;
     block->points = malloc(sizeof(Point) * numOfPoints);
@@ -363,15 +355,15 @@ int main(){
     alarm(1);
 
     // init
-    board = CreateEmptyBoard();
-    block = CreateFirstBlock(BLOCK_SIZE);
+    board = CreateTetrisBoard();
+    block = CreateBlock(BLOCK_S);
 
     while(board->shouldStop == 0){
         // when bock is on floor
-        if (ShouldRemoveBlock()){
-            ClearBlock();
+        if (IsOnFloor()){
+            ClearBoard();
             InitBlock(block);
-            DrawBoard();
+            DrawTetris();
             sigprocmask(SIG_UNBLOCK, &both_signals, NULL);
         }
         // listening to signals
@@ -387,3 +379,4 @@ int main(){
     NiceExit();
     return 0;
 }
+
