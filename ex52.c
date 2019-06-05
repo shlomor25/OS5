@@ -124,7 +124,7 @@ void PushLeft(){
  */
 void DrawTetris(){
     system(CLEAR);
-    int i,j;
+    int i;
     for (i = 0; i < BOARD_S; i++){
         printf("%s", board->spots[i]);
         printf("\n");
